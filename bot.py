@@ -14,7 +14,7 @@ dp = Dispatcher()
 # ⚙️ НАСТРОЙКИ
 # =========================
 
-CHAT_ID = -100XXXXXXXXXX  # <-- вставь id группы
+#CHAT_ID = -100XXXXXXXXXX  # <-- вставь id группы
 
 UK_MANAGERS = "@BE4HOCT6 @ash_avanesyan"
 TR_MANAGERS = "@Hovo120193"
