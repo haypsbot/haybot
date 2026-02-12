@@ -27,7 +27,7 @@ SUPPORT_MANAGER = "@BE4HOCT6"
 
 main_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="💳 Գնել / Գներ")],
+        [KeyboardButton(text="💳 PS Plus բաժանորդագրություն")],
         [KeyboardButton(text="🆘 Աջակցություն")]
     ],
     resize_keyboard=True
