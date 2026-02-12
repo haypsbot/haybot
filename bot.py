@@ -18,7 +18,7 @@ dp = Dispatcher()
 # ⚙️ НАСТРОЙКИ
 # ===================================
 
-CHAT_ID = -100XXXXXXXXXX   # <-- вставь id группы
+#CHAT_ID = -100XXXXXXXXXX   # <-- вставь id группы
 
 MIN_DISCOUNT = 30          # >= 30%
 POST_EVERY_DAYS = 3        # каждые 2-3 дня
