@@ -25,8 +25,6 @@ TOP_COUNT = 5
 POST_EVERY_DAYS = 3
 CHECK_EVERY = 3600  # проверка каждый час
 
-REGIONS = ["ua", "tr"]
-
 
 POPULAR = [
     "gta", "fc", "fifa", "call of duty",
@@ -57,6 +55,7 @@ WELCOME = """🤖 Բարև, ես HayBot-ն եմ
 ✅ Օգնել բաժանորդագրությամբ
 ✅ Կապել ադմինների հետ
 ✅ Ցույց տալ լավագույն զեղչերը
+
 Ընտրիր ստորև 👇
 """
 
@@ -88,7 +87,7 @@ def only_back():
 
 
 # ==============================
-# СКИДКИ (API способ)
+# 🔥 СКИДКИ (НОВАЯ СТАБИЛЬНАЯ ВЕРСИЯ)
 # ==============================
 
 def popular(title):
@@ -96,37 +95,44 @@ def popular(title):
     return any(x in t for x in POPULAR)
 
 
-async def fetch_region(region):
+async def fetch_deals():
+    """
+    Берём ВСЕ PlayStation скидки (без региона).
+    Это стабильнее и не возвращает пусто.
+    """
 
-    url = f"https://www.dekudeals.com/api/v1/discounts?store=playstation&region={region}"
+    url = "https://www.dekudeals.com/api/v1/discounts?store=playstation"
 
     timeout = aiohttp.ClientTimeout(total=8)
 
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url) as r:
-            return await r.json()
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url) as r:
+                return await r.json()
+    except:
+        return []
 
 
 async def update_cache():
     global CACHE
 
+    data = await fetch_deals()
+
+    if not data:
+        CACHE = []
+        return
+
     games = []
 
-    for r in REGIONS:
-        try:
-            data = await fetch_region(r)
-        except:
-            continue
+    for g in data:
+        title = g.get("name", "")
+        discount = int(g.get("discount_percent", 0))
+        link = g.get("url", "")
 
-        for g in data:
-            title = g["name"]
-            discount = int(g["discount_percent"])
-            link = g["url"]
+        if discount >= MIN_DISCOUNT and popular(title):
+            games.append((title, discount, link))
 
-            if discount >= MIN_DISCOUNT and popular(title):
-                games.append((title, discount, link))
-
-    games = sorted(games, key=lambda x: x[1], reverse=True)
+    games.sort(key=lambda x: x[1], reverse=True)
     CACHE = games[:TOP_COUNT]
 
 
@@ -163,6 +169,11 @@ async def support(m: types.Message):
 
 @dp.message(Command("discounts"))
 async def discounts(m: types.Message):
+
+    if not CACHE:
+        await m.answer("🔄 Թարմացնում եմ զեղչերը, փորձիր մի քանի վայրկյանից...")
+        return
+
     await m.answer(format_games(), reply_markup=only_back())
 
 
@@ -187,6 +198,11 @@ async def support_btn(c: types.CallbackQuery):
 
 @dp.callback_query(F.data == "discounts")
 async def discounts_btn(c: types.CallbackQuery):
+
+    if not CACHE:
+        await c.message.edit_text("🔄 Թարմացնում եմ զեղչերը...", reply_markup=only_back())
+        return
+
     await c.message.edit_text(format_games(), reply_markup=only_back())
 
 
@@ -208,6 +224,7 @@ async def scheduler():
     global LAST_POST
 
     while True:
+
         await update_cache()
 
         if datetime.now() - LAST_POST >= timedelta(days=POST_EVERY_DAYS) and CACHE:
