@@ -1,7 +1,6 @@
 import asyncio
 import os
 import aiohttp
-from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, types, F
@@ -15,25 +14,25 @@ bot = Bot(TOKEN)
 dp = Dispatcher()
 
 
-# ===================================
+# ==============================
 # ⚙️ НАСТРОЙКИ
-# ===================================
+# ==============================
 
 #CHAT_ID = -100XXXXXXXXXX
 
 MIN_DISCOUNT = 30
 TOP_COUNT = 5
 POST_EVERY_DAYS = 3
-CHECK_EVERY = 86400
+CHECK_EVERY = 3600  # проверка каждый час
 
-REGIONS = ["ukraine", "turkey"]
+REGIONS = ["ua", "tr"]
 
 
-POPULAR_GAMES = [
+POPULAR = [
     "gta", "fc", "fifa", "call of duty",
     "god of war", "spider", "last of us",
     "hogwarts", "red dead", "cyberpunk",
-    "mortal kombat", "tekken", "elden ring"
+    "tekken", "mortal kombat", "elden ring"
 ]
 
 
@@ -42,25 +41,23 @@ TR_MANAGERS = "@Hovo120193"
 SUPPORT_MANAGER = "@BE4HOCT6 @Hovo120193 @ash_avanesyan"
 
 
-LAST_POST_TIME = datetime.min
 CACHE = []
+LAST_POST = datetime.min
 
 
-# ===================================
+# ==============================
 # UI
-# ===================================
+# ==============================
 
-WELCOME_TEXT = """🤖 Բարև, ես HayBot-ն եմ
+WELCOME = """🤖 Բարև, ես HayBot-ն եմ
 
-Քո խելացի PlayStation օգնականը 🚀
-
-Ես կարող եմ՝
-✅ Օգնել բաժանորդագրությամբ
-✅ Ցույց տալ լավագույն զեղչերը
-✅ Կապել ադմինների հետ
-
+Քո PlayStation օգնականը 🚀
 Ընտրիր ստորև 👇
 """
+
+
+def back_btn():
+    return [[InlineKeyboardButton(text="⬅️ Հետ", callback_data="back")]]
 
 
 def main_menu():
@@ -77,180 +74,147 @@ def country_menu():
             InlineKeyboardButton(text="🇺🇦 Ուկրաինա", callback_data="uk"),
             InlineKeyboardButton(text="🇹🇷 Թուրքիա", callback_data="tr")
         ],
-        [InlineKeyboardButton(text="⬅️ Հետ", callback_data="back")]
+        *back_btn()
     ])
 
 
-# ===================================
-# UTILS
-# ===================================
+def only_back():
+    return InlineKeyboardMarkup(inline_keyboard=back_btn())
 
-def is_popular(title):
+
+# ==============================
+# СКИДКИ (API способ)
+# ==============================
+
+def popular(title):
     t = title.lower()
-    return any(x in t for x in POPULAR_GAMES)
+    return any(x in t for x in POPULAR)
 
 
-def build_text(games):
-    text = "🔥 PlayStation Store Top զեղչեր\n\n"
+async def fetch_region(region):
 
-    for title, discount, link in games:
-        text += f"🎮 {title} — -{discount}%\n🔗 {link}\n\n"
+    url = f"https://www.dekudeals.com/api/v1/discounts?store=playstation&region={region}"
 
-    return text
-
-
-# ===================================
-# 🔥 DEKUDEALS PARSER
-# ===================================
-
-async def fetch_dekudeals(region):
-
-    url = f"https://www.dekudeals.com/items?filter[store]=playstation&filter[region]={region}&filter[discount_min]={MIN_DISCOUNT}"
-
-    timeout = aiohttp.ClientTimeout(total=10)
+    timeout = aiohttp.ClientTimeout(total=8)
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.get(url) as r:
-            html = await r.text()
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    games = []
-
-    cards = soup.select(".main-list-item")
-
-    for c in cards:
-        try:
-            title = c.select_one(".item-name").text.strip()
-            discount_text = c.select_one(".discount-badge").text.strip()
-
-            discount = int(discount_text.replace("-", "").replace("%", ""))
-
-            link = "https://www.dekudeals.com" + c.select_one("a")["href"]
-
-            if discount >= MIN_DISCOUNT and is_popular(title):
-                games.append((title, discount, link))
-        except:
-            pass
-
-    return games
+            return await r.json()
 
 
 async def update_cache():
     global CACHE
 
-    all_games = []
+    games = []
 
-    for region in REGIONS:
-        region_games = await fetch_dekudeals(region)
-        all_games.extend(region_games)
+    for r in REGIONS:
+        try:
+            data = await fetch_region(r)
+        except:
+            continue
 
-    all_games = sorted(all_games, key=lambda x: x[1], reverse=True)
+        for g in data:
+            title = g["name"]
+            discount = int(g["discount_percent"])
+            link = g["url"]
 
-    CACHE = all_games[:TOP_COUNT]
+            if discount >= MIN_DISCOUNT and popular(title):
+                games.append((title, discount, link))
+
+    games = sorted(games, key=lambda x: x[1], reverse=True)
+    CACHE = games[:TOP_COUNT]
 
 
-# ===================================
-# COMMANDS
-# ===================================
+def format_games():
+    if not CACHE:
+        return "❌ Զեղչեր չեն գտնվել"
+
+    text = "🔥 Top PlayStation զեղչեր\n\n"
+
+    for t, d, l in CACHE:
+        text += f"🎮 {t} — -{d}%\n🔗 {l}\n\n"
+
+    return text
+
+
+# ==============================
+# КОМАНДЫ
+# ==============================
 
 @dp.message(Command("start"))
-async def start(message: types.Message):
-    await message.answer(WELCOME_TEXT, reply_markup=main_menu())
+async def start(m: types.Message):
+    await m.answer(WELCOME, reply_markup=main_menu())
 
 
 @dp.message(Command("buy"))
-async def buy(message: types.Message):
-    await message.answer("🎮 Ընտրիր տարածաշրջանը 👇", reply_markup=country_menu())
+async def buy(m: types.Message):
+    await m.answer("Ընտրիր տարածաշրջանը 👇", reply_markup=country_menu())
 
 
 @dp.message(Command("support"))
-async def support(message: types.Message):
-    await message.answer(f"🆘 Աջակցություն 👉 {SUPPORT_MANAGER}")
+async def support(m: types.Message):
+    await m.answer(f"🆘 {SUPPORT_MANAGER}", reply_markup=only_back())
 
 
 @dp.message(Command("discounts"))
-async def discounts(message: types.Message):
-
-    if not CACHE:
-        await message.answer("🔍 Զեղչեր դեռ բեռնվում են, փորձիր մի քիչ հետո")
-        return
-
-    await message.answer(build_text(CACHE))
+async def discounts(m: types.Message):
+    await m.answer(format_games(), reply_markup=only_back())
 
 
-# ===================================
+# ==============================
 # CALLBACKS
-# ===================================
+# ==============================
 
-@dp.callback_query(F.data == "discounts")
-async def discounts_btn(callback: types.CallbackQuery):
-    await callback.message.edit_text(build_text(CACHE), reply_markup=main_menu())
+@dp.callback_query(F.data == "back")
+async def back(c: types.CallbackQuery):
+    await c.message.edit_text(WELCOME, reply_markup=main_menu())
 
 
 @dp.callback_query(F.data == "buy")
-async def buy_btn(callback: types.CallbackQuery):
-    await callback.message.edit_text("🎮 Ընտրիր տարածաշրջանը 👇", reply_markup=country_menu())
+async def buy_btn(c: types.CallbackQuery):
+    await c.message.edit_text("Ընտրիր տարածաշրջանը 👇", reply_markup=country_menu())
 
 
 @dp.callback_query(F.data == "support")
-async def support_btn(callback: types.CallbackQuery):
-    await callback.message.edit_text(f"🆘 Աջակցություն 👉 {SUPPORT_MANAGER}", reply_markup=main_menu())
+async def support_btn(c: types.CallbackQuery):
+    await c.message.edit_text(f"🆘 {SUPPORT_MANAGER}", reply_markup=only_back())
 
 
-@dp.callback_query(F.data == "back")
-async def back(callback: types.CallbackQuery):
-    await callback.message.edit_text(WELCOME_TEXT, reply_markup=main_menu())
+@dp.callback_query(F.data == "discounts")
+async def discounts_btn(c: types.CallbackQuery):
+    await c.message.edit_text(format_games(), reply_markup=only_back())
 
 
 @dp.callback_query(F.data == "uk")
-async def uk(callback: types.CallbackQuery):
-    await callback.message.edit_text(f"🇺🇦 Գրիր 👉 {UK_MANAGERS}", reply_markup=main_menu())
+async def uk(c: types.CallbackQuery):
+    await c.message.edit_text(f"🇺🇦 Գրիր 👉 {UK_MANAGERS}", reply_markup=only_back())
 
 
 @dp.callback_query(F.data == "tr")
-async def tr(callback: types.CallbackQuery):
-    await callback.message.edit_text(f"🇹🇷 Գրիր 👉 {TR_MANAGERS}", reply_markup=main_menu())
+async def tr(c: types.CallbackQuery):
+    await c.message.edit_text(f"🇹🇷 Գրիր 👉 {TR_MANAGERS}", reply_markup=only_back())
 
 
-# ===================================
-# WELCOME
-# ===================================
-
-@dp.message(F.new_chat_members)
-async def welcome(message: types.Message):
-    for user in message.new_chat_members:
-        name = f"@{user.username}" if user.username else user.full_name
-
-        await message.answer(
-            f"👋 Բարի գալուստ, {name}!\n\n{WELCOME_TEXT}",
-            reply_markup=main_menu()
-        )
-
-
-# ===================================
-# BACKGROUND TASKS
-# ===================================
+# ==============================
+# ФОН
+# ==============================
 
 async def scheduler():
-    global LAST_POST_TIME
+    global LAST_POST
 
     while True:
-
         await update_cache()
 
-        now = datetime.now()
-
-        if now - LAST_POST_TIME >= timedelta(days=POST_EVERY_DAYS) and CACHE:
-            await bot.send_message(CHAT_ID, build_text(CACHE))
-            LAST_POST_TIME = now
+        if datetime.now() - LAST_POST >= timedelta(days=POST_EVERY_DAYS) and CACHE:
+            await bot.send_message(CHAT_ID, format_games())
+            LAST_POST = datetime.now()
 
         await asyncio.sleep(CHECK_EVERY)
 
 
-# ===================================
-# START
-# ===================================
+# ==============================
+# ЗАПУСК
+# ==============================
 
 async def main():
     asyncio.create_task(scheduler())
