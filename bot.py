@@ -2,7 +2,7 @@ import asyncio
 import os
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 TOKEN = os.getenv("TOKEN")
 
@@ -10,40 +10,33 @@ bot = Bot(TOKEN)
 dp = Dispatcher()
 
 
-# =========================
-# ⚙️ НАСТРОЙКИ
-# =========================
-
-#CHAT_ID = -100XXXXXXXXXX  # <-- вставь ID группы
+#CHAT_ID = -100XXXXXXXXXX
 
 UK_MANAGERS = "@BE4HOCT6 @ash_avanesyan"
 TR_MANAGERS = "@Hovo120193"
-SUPPORT_MANAGER = "@BE4HOCT6 @ash_avanesyan @Hovo120193"
+SUPPORT_MANAGER = "@BE4HOCT6"
 
 
 # =========================
-# 📋 КЛАВИАТУРЫ
+# КНОПКИ INLINE
 # =========================
 
-main_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="🎮 PS Plus բաժանորդագրություն")],
-        [KeyboardButton(text="🆘 Աջակցություն")]
+main_kb = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="🎮 PS Plus բաժանորդագրություն", callback_data="ps")],
+    [InlineKeyboardButton(text="🆘 Աջակցություն", callback_data="support")]
+])
+
+country_kb = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="🇺🇦 Ուկրաինա", callback_data="uk"),
+        InlineKeyboardButton(text="🇹🇷 Թուրքիա", callback_data="tr")
     ],
-    resize_keyboard=True
-)
-
-country_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="🇺🇦 Ուկրաինա"), KeyboardButton(text="🇹🇷 Թուրքիա")],
-        [KeyboardButton(text="⬅️ Հետ")]
-    ],
-    resize_keyboard=True
-)
+    [InlineKeyboardButton(text="⬅️ Հետ", callback_data="back")]
+])
 
 
 # =========================
-# 🚀 START
+# START
 # =========================
 
 @dp.message(Command("start"))
@@ -55,93 +48,78 @@ async def start(message: types.Message):
 
 
 # =========================
-# ⬅️ НАЗАД
+# CALLBACKS
 # =========================
 
-@dp.message(lambda m: m.text == "⬅️ Հետ")
-async def back(message: types.Message):
-    await message.answer("Վերադարձ գլխավոր մենյու 👇", reply_markup=main_kb)
-
-
-# =========================
-# 🎮 PS PLUS (главная функция)
-# =========================
-
-@dp.message(lambda m: m.text == "🎮 PS Plus բաժանորդագրություն")
-async def ps_plus(message: types.Message):
-    await message.answer(
+@dp.callback_query(F.data == "ps")
+async def ps(callback: types.CallbackQuery):
+    await callback.message.edit_text(
         "🎮 Ընտրիր տարածաշրջանը 👇",
         reply_markup=country_kb
     )
 
 
-# =========================
-# 🇺🇦 УКРАИНА
-# =========================
+@dp.callback_query(F.data == "support")
+async def support(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        f"🆘 Աջակցություն\n\nԳրիր 👉 {SUPPORT_MANAGER}",
+        reply_markup=main_kb
+    )
 
-@dp.message(lambda m: m.text == "🇺🇦 Ուկրաինա")
-async def ukraine(message: types.Message):
-    await message.answer(
-        f"🇺🇦 Ուկրաինական PS Plus\n\n"
-        f"Գրիր 👉 {UK_MANAGERS}"
+
+@dp.callback_query(F.data == "uk")
+async def uk(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        f"🇺🇦 Ուկրաինական PS Plus\n\nԳրիր 👉 {UK_MANAGERS}",
+        reply_markup=main_kb
+    )
+
+
+@dp.callback_query(F.data == "tr")
+async def tr(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        f"🇹🇷 Թուրքական PS Plus\n\nԳրիր 👉 {TR_MANAGERS}",
+        reply_markup=main_kb
+    )
+
+
+@dp.callback_query(F.data == "back")
+async def back(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        "Գլխավոր մենյու 👇",
+        reply_markup=main_kb
     )
 
 
 # =========================
-# 🇹🇷 ТУРЦИЯ
-# =========================
-
-@dp.message(lambda m: m.text == "🇹🇷 Թուրքիա")
-async def turkey(message: types.Message):
-    await message.answer(
-        f"🇹🇷 Թուրքական PS Plus\n\n"
-        f"Գրիր 👉 {TR_MANAGERS}"
-    )
-
-
-# =========================
-# 🆘 ПОДДЕРЖКА
-# =========================
-
-@dp.message(lambda m: m.text == "🆘 Աջակցություն")
-async def support(message: types.Message):
-    await message.answer(
-        f"🆘 Աջակցություն\n\nԳրիր 👉 {SUPPORT_MANAGER}"
-    )
-
-
-# =========================
-# 👋 ПРИВЕТ НОВЫМ
+# ПРИВЕТ НОВЫМ
 # =========================
 
 @dp.message(F.new_chat_members)
 async def welcome(message: types.Message):
     for user in message.new_chat_members:
         await message.answer(
-            f"👋 Բարի գալուստ, {user.full_name}!\n\n"
-            "🎮 PS Plus բաժանորդագրությունները հասանելի են\n"
-            "Սեղմիր մենյուից և ընտրիր տարածաշրջանը 🤖"
+            f"👋 Բարի գալուստ, {user.full_name}!\nՕգտագործիր բոտը 👇",
+            reply_markup=main_kb
         )
 
 
 # =========================
-# 📢 АВТОПОСТ
+# АВТОПОСТ
 # =========================
 
 async def auto_post():
     while True:
         await bot.send_message(
             CHAT_ID,
-            "🔥 PS Plus բաժանորդագրություններ հասանելի են\n\n"
-            f"🇺🇦 Ուկրաինա → {UK_MANAGERS}\n"
-            f"🇹🇷 Թուրքիա → {TR_MANAGERS}\n\n"
-            "Օգտագործիր բոտը 👇"
+            "🔥 PS Plus բաժանորդագրություններ հասանելի են\nՍեղմիր կոճակը 👇",
+            reply_markup=main_kb
         )
         await asyncio.sleep(10800)
 
 
 # =========================
-# ▶️ ЗАПУСК
+# ЗАПУСК
 # =========================
 
 async def main():
