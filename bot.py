@@ -26,7 +26,7 @@ async def start(message: types.Message):
 
 @dp.message(lambda m: m.text == "💰 Գներ")
 async def prices(message: types.Message):
-    await message.answer("🎮 PS Plus 1 ամիս — 5000֏")
+    await message.answer("🎮 PS Plus 1 ամիս — ****֏")
 
 @dp.message(lambda m: m.text == "🛒 Գնել")
 async def buy(message: types.Message):
