@@ -76,7 +76,7 @@ BOT_REMINDER_MESSAGE = """💡 Հիշեցում՝
 
 Կարող ես օգտագործել հետևյալ հրամանները՝
 
-/start - Մեկնարկել բոտը
+/start - Սկսել բոտը
 /discounts - Տեսնել PlayStation զեղչերը 🔥
 /buy - Գնել PS Plus բաժանորդագրություն
 /support - Կապվել ադմինների հետ
@@ -95,7 +95,7 @@ WELCOME_NEW_MEMBER = """👋 Բարի գալուստ, {name}!
 ✅ Օգտակար խորհուրդներ և նորություններ
 
 🤖 Մեր բոտը օգտագործելու համար գրիր՝
-/start - Մեկնարկել բոտը
+/start - Սկսել բոտը
 /discounts - Տեսնել զեղչերը 🔥
 /buy - Գնել բաժանորդագրություն
 
@@ -289,6 +289,35 @@ async def on_new_chat_members(message: types.Message):
 
 
 # ==============================
+# КОМАНДЫ (В ПРАВИЛЬНОМ ПОРЯДКЕ!)
+# ==============================
+
+@dp.message(Command("start"))
+async def start(m: types.Message):
+    await m.answer(WELCOME, reply_markup=main_menu())
+
+
+@dp.message(Command("buy"))
+async def buy(m: types.Message):
+    await m.answer("Ընտրիր տարածաշրջանը 👇", reply_markup=country_menu())
+
+
+@dp.message(Command("support"))
+async def support(m: types.Message):
+    await m.answer(f"🆘 {SUPPORT_MANAGER}", reply_markup=only_back())
+
+
+@dp.message(Command("discounts"))
+async def discounts(m: types.Message):
+    if not CACHE:
+        msg = await m.answer("🔄 Թարմացնում եմ զեղչերը...")
+        await update_cache()
+        await msg.edit_text(format_games(), reply_markup=only_back())
+    else:
+        await m.answer(format_games(), reply_markup=only_back())
+
+
+# ==============================
 # 🔑 РЕАКЦИЯ НА КЛЮЧЕВЫЕ СЛОВА
 # ==============================
 
@@ -307,8 +336,8 @@ async def handle_keywords(message: types.Message):
     if text.startswith('/'):
         return
     
-    keywords_discounts = ['զեղչ', 'скидка', 'discount', 'акция', 'sale', 'zexj']
-    keywords_buy = ['գնել', 'купить', 'ps plus', 'подписка','psplus', 'բաժանորդ', 'subscription', 'padpiska''xax']
+    keywords_discounts = ['զեղչ', 'скидк', 'discount', 'акци', 'sale']
+    keywords_buy = ['գնել', 'купить', 'ps plus', 'подписка', 'բաժանորդ', 'subscription']
     keywords_bot = ['բոտ', 'бот', 'bot', 'հայբոտ', 'haybot']
     
     # Если упомянули скидки
@@ -340,57 +369,6 @@ async def handle_keywords(message: types.Message):
             "Օգտագործիր՝ /start տեսնելու ինչ կարող եմ անել 🤖"
         )
         return
-
-
-# ==============================
-# КОМАНДЫ
-# ==============================
-
-@dp.message(Command("start"))
-async def start(m: types.Message):
-    await m.answer(WELCOME, reply_markup=main_menu())
-
-
-@dp.message(Command("buy"))
-async def buy(m: types.Message):
-    await m.answer("Ընտրիր տարածաշրջանը 👇", reply_markup=country_menu())
-
-
-@dp.message(Command("support"))
-async def support(m: types.Message):
-    await m.answer(f"🆘 {SUPPORT_MANAGER}", reply_markup=only_back())
-
-
-@dp.message(Command("discounts"))
-async def discounts(m: types.Message):
-    if not CACHE:
-        msg = await m.answer("🔄 Թարմացնում եմ զեղչերը...")
-        await update_cache()
-        await msg.edit_text(format_games(), reply_markup=only_back())
-    else:
-        await m.answer(format_games(), reply_markup=only_back())
-
-
-@dp.message(Command("help"))
-async def help_command(m: types.Message):
-    help_text = """📖 Օգնություն՝
-
-Հասանելի հրամաններ՝
-
-/start - Մեկնարկել բոտը
-/discounts - Տեսնել PlayStation զեղչերը 🔥
-/buy - Գնել PS Plus բաժանորդագրություն
-/support - Կապվել ադմինների հետ
-
-Կարող ես նաև պարզապես գրել՝
-"զեղչ" - ցույց կտամ զեղչերը
-"գնել" - կօգնեմ գնել բաժանորդագրություն
-"բոտ" - կպատասխանեմ
-
-📱 Միացիր մեր Facebook խմբին՝
-https://www.facebook.com/share/g/17foQWxCyZ/"""
-    
-    await m.answer(help_text, reply_markup=only_back())
 
 
 # ==============================
