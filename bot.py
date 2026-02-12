@@ -18,7 +18,7 @@ dp = Dispatcher()
 
 UK_MANAGERS = "@BE4HOCT6 @ash_avanesyan"
 TR_MANAGERS = "@Hovo120193"
-SUPPORT_MANAGER = "@BE4HOCT6"
+SUPPORT_MANAGER = "@BE4HOCT6 @Hovo120193 @ash_avanesyan"
 
 
 # =========================
