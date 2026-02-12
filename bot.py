@@ -22,7 +22,7 @@ SUPPORT_MANAGER = "@BE4HOCT6"
 
 
 # =========================
-# 🧠 ТЕКСТ ПРИВЕТСТВИЯ
+# 🧠 ТЕКСТЫ
 # =========================
 
 WELCOME_TEXT = """🤖 Բարև, ես HayBot-ն եմ
@@ -35,58 +35,48 @@ WELCOME_TEXT = """🤖 Բարև, ես HayBot-ն եմ
 ✅ Օգնել գնումների հարցում
 ✅ Կապել քեզ ադմինի հետ
 
-Գրիր /start և ես պատրաստ եմ աշխատել ⚡
+Ընտրիր ստորև 👇
 """
 
 
 # =========================
-# 🔘 INLINE КНОПКИ
+# 🔘 КНОПКИ
 # =========================
 
-main_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="🎮 Գնել բաժանորդագրություն", callback_data="buy")],
-    [InlineKeyboardButton(text="🆘 Աջակցություն", callback_data="support")]
-])
+def main_menu():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎮 PS Plus բաժանորդագրություն", callback_data="buy")],
+        [InlineKeyboardButton(text="🆘 Աջակցություն", callback_data="support")]
+    ])
 
-country_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [
-        InlineKeyboardButton(text="🇺🇦 Ուկրաինա", callback_data="uk"),
-        InlineKeyboardButton(text="🇹🇷 Թուրքիա", callback_data="tr")
-    ],
-    [InlineKeyboardButton(text="⬅️ Հետ", callback_data="back")]
-])
+
+def country_menu():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🇺🇦 Ուկրաինա", callback_data="uk"),
+            InlineKeyboardButton(text="🇹🇷 Թուրքիա", callback_data="tr")
+        ],
+        [InlineKeyboardButton(text="⬅️ Հետ", callback_data="back")]
+    ])
 
 
 # =========================
-# 🚀 /start
+# 🚀 КОМАНДЫ
 # =========================
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer(WELCOME_TEXT, reply_markup=main_kb)
+    await message.answer(WELCOME_TEXT, reply_markup=main_menu())
 
-
-# =========================
-# 🛒 /buy
-# =========================
 
 @dp.message(Command("buy"))
-async def buy_command(message: types.Message):
-    await message.answer(
-        "🎮 Ընտրիր տարածաշրջանը 👇",
-        reply_markup=country_kb
-    )
+async def buy_cmd(message: types.Message):
+    await message.answer("🎮 Ընտրիր տարածաշրջանը 👇", reply_markup=country_menu())
 
-
-# =========================
-# 🆘 /support
-# =========================
 
 @dp.message(Command("support"))
-async def support_command(message: types.Message):
-    await message.answer(
-        f"🆘 Աջակցություն\n\nԳրիր 👉 {SUPPORT_MANAGER}"
-    )
+async def support_cmd(message: types.Message):
+    await message.answer(f"🆘 Աջակցություն 👉 {SUPPORT_MANAGER}")
 
 
 # =========================
@@ -95,25 +85,19 @@ async def support_command(message: types.Message):
 
 @dp.callback_query(F.data == "buy")
 async def buy_btn(callback: types.CallbackQuery):
-    await callback.message.edit_text(
-        "🎮 Ընտրիր տարածաշրջանը 👇",
-        reply_markup=country_kb
-    )
+    await callback.message.edit_text("🎮 Ընտրիր տարածաշրջանը 👇", reply_markup=country_menu())
 
 
 @dp.callback_query(F.data == "support")
 async def support_btn(callback: types.CallbackQuery):
-    await callback.message.edit_text(
-        f"🆘 Աջակցություն\n\nԳրիր 👉 {SUPPORT_MANAGER}",
-        reply_markup=main_kb
-    )
+    await callback.message.edit_text(f"🆘 Աջակցություն 👉 {SUPPORT_MANAGER}", reply_markup=main_menu())
 
 
 @dp.callback_query(F.data == "uk")
 async def uk(callback: types.CallbackQuery):
     await callback.message.edit_text(
         f"🇺🇦 Ուկրաինական PS Plus\n\nԳրիր 👉 {UK_MANAGERS}",
-        reply_markup=main_kb
+        reply_markup=main_menu()
     )
 
 
@@ -121,13 +105,13 @@ async def uk(callback: types.CallbackQuery):
 async def tr(callback: types.CallbackQuery):
     await callback.message.edit_text(
         f"🇹🇷 Թուրքական PS Plus\n\nԳրիր 👉 {TR_MANAGERS}",
-        reply_markup=main_kb
+        reply_markup=main_menu()
     )
 
 
 @dp.callback_query(F.data == "back")
 async def back(callback: types.CallbackQuery):
-    await callback.message.edit_text(WELCOME_TEXT, reply_markup=main_kb)
+    await callback.message.edit_text(WELCOME_TEXT, reply_markup=main_menu())
 
 
 # =========================
@@ -135,11 +119,17 @@ async def back(callback: types.CallbackQuery):
 # =========================
 
 @dp.message(F.new_chat_members)
-async def welcome_new_users(message: types.Message):
+async def welcome_new(message: types.Message):
     for user in message.new_chat_members:
+
+        # если есть @username — используем его, иначе имя
+        name = f"@{user.username}" if user.username else user.full_name
+
         await message.answer(
-            f"👋 Բարի գալուստ, {user.full_name}!\n\n{WELCOME_TEXT}",
-            reply_markup=main_kb
+            f"👋 Բարի գալուստ, {name}!\n\n"
+            "🎮 PS Plus բաժանորդագրությունները հասանելի են\n"
+            "Օգտագործիր HayBot-ը ստորև 👇",
+            reply_markup=main_menu()
         )
 
 
@@ -152,7 +142,7 @@ async def auto_post():
         await bot.send_message(
             CHAT_ID,
             "🔥 PS Plus բաժանորդագրություններ հասանելի են\nՍեղմիր ստորև 👇",
-            reply_markup=main_kb
+            reply_markup=main_menu()
         )
         await asyncio.sleep(10800)  # 3 часа
 
