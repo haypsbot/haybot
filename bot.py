@@ -19,7 +19,7 @@ dp = Dispatcher()
 # ⚙️ НАСТРОЙКИ
 # ===================================
 
-CHAT_ID = -100XXXXXXXXXX
+#CHAT_ID = -100XXXXXXXXXX
 
 MIN_DISCOUNT = 30
 TOP_COUNT = 5
