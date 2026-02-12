@@ -4,7 +4,7 @@ import aiohttp
 from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command, ChatMemberUpdatedFilter, KICKED, MEMBER, ADMINISTRATOR
+from aiogram.filters import Command, ChatMemberUpdatedFilter, MEMBER
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatMemberUpdated
 
 
@@ -23,11 +23,15 @@ CHAT_ID = -1003257278638
 MIN_DISCOUNT = 30
 TOP_COUNT = 5
 POST_EVERY_DAYS = 3
-CHECK_EVERY = 3600  # проверка каждый час
+CHECK_EVERY = 3600
 
 # Facebook խմբի հրապարակում
-FB_POST_EVERY_DAYS = 2  # Ամեն 2 օրը մեկ
+FB_POST_EVERY_DAYS = 2
 LAST_FB_POST = datetime.min
+
+# Напоминание о боте
+BOT_REMINDER_EVERY_DAYS = 4
+LAST_BOT_REMINDER = datetime.min
 
 
 POPULAR = [
@@ -49,7 +53,7 @@ LAST_POST = datetime.min
 
 
 # ==============================
-# 📱 FACEBOOK ԽՈՒՄԲ
+# 📱 СООБЩЕНИЯ
 # ==============================
 
 FB_GROUP_MESSAGE = """🎮 Միացիր մեր Հայ🇦🇲PS խմբին Facebook-ում! 🔥
@@ -66,9 +70,19 @@ FB_GROUP_MESSAGE = """🎮 Միացիր մեր Հայ🇦🇲PS խմբին Faceb
 Մենք սպասում ենք քեզ! 🎯"""
 
 
-# ==============================
-# 👋 ПРИВЕТСТВИЕ НОВЫХ УЧАСТНИКОВ
-# ==============================
+BOT_REMINDER_MESSAGE = """💡 Հիշեցում՝ 
+
+Մեր խմբում աշխատում է HayBot! 🤖
+
+Կարող ես օգտագործել հետևյալ հրամանները՝
+
+/start - Մեկնարկել բոտը
+/discounts - Տեսնել PlayStation զեղչերը 🔥
+/buy - Գնել PS Plus բաժանորդագրություն
+/support - Կապվել ադմինների հետ
+
+Պարզապես գրիր հրամանը այստեղ՝ չատում! 👇"""
+
 
 WELCOME_NEW_MEMBER = """👋 Բարի գալուստ, {name}! 
 
@@ -80,18 +94,16 @@ WELCOME_NEW_MEMBER = """👋 Բարի գալուստ, {name}!
 ✅ Հուսալի խաղային հաշիվներ
 ✅ Օգտակար խորհուրդներ և նորություններ
 
-📱 Օգտագործիր /start՝ բոտին մեկնարկելու համար
-🔥 Օգտագործիր /discounts՝ ակտուալ զեղչերը տեսնելու համար
+🤖 Մեր բոտը օգտագործելու համար գրիր՝
+/start - Մեկնարկել բոտը
+/discounts - Տեսնել զեղչերը 🔥
+/buy - Գնել բաժանորդագրություն
 
-Մենք սպասում ենք քեզ նաև մեր Facebook խմբում՝
+📱 Միացիր նաև մեր Facebook խմբում՝
 🔗 https://www.facebook.com/share/g/17foQWxCyZ/
 
 Հաջող խաղ! 🎯"""
 
-
-# ==============================
-# UI
-# ==============================
 
 WELCOME = """🤖 Բարև, ես HayBot-ն եմ
 
@@ -105,6 +117,10 @@ WELCOME = """🤖 Բարև, ես HayBot-ն եմ
 Ընտրիր ստորև 👇
 """
 
+
+# ==============================
+# UI
+# ==============================
 
 def back_btn():
     return [[InlineKeyboardButton(text="⬅️ Հետ", callback_data="back")]]
@@ -142,10 +158,6 @@ def popular(title):
 
 
 async def fetch_deals():
-    """
-    Получаем скидки PlayStation из PSDeals API
-    """
-    
     url = "https://psdeals.net/api/v1/games"
     
     headers = {
@@ -247,14 +259,9 @@ def format_games():
 
 @dp.chat_member(ChatMemberUpdatedFilter(member_status_changed=MEMBER))
 async def on_user_join(event: ChatMemberUpdated):
-    """
-    Срабатывает когда новый пользователь присоединяется к каналу/группе
-    """
-    # Получаем имя нового участника
     user = event.new_chat_member.user
     name = user.first_name or user.username or "Ընկեր"
     
-    # Отправляем приветственное сообщение
     welcome_text = WELCOME_NEW_MEMBER.format(name=name)
     
     try:
@@ -267,12 +274,8 @@ async def on_user_join(event: ChatMemberUpdated):
         print(f"❌ Ошибка отправки приветствия: {e}")
 
 
-# Альтернативный обработчик для групп (если первый не сработает)
 @dp.message(F.new_chat_members)
 async def on_new_chat_members(message: types.Message):
-    """
-    Резервный обработчик для групп
-    """
     for user in message.new_chat_members:
         name = user.first_name or user.username or "Ընկեր"
         
@@ -283,6 +286,60 @@ async def on_new_chat_members(message: types.Message):
             print(f"✅ Приветствие отправлено для {name} (резервный метод)")
         except Exception as e:
             print(f"❌ Ошибка отправки приветствия: {e}")
+
+
+# ==============================
+# 🔑 РЕАКЦИЯ НА КЛЮЧЕВЫЕ СЛОВА
+# ==============================
+
+@dp.message(F.text)
+async def handle_keywords(message: types.Message):
+    """
+    Реагирует на ключевые слова в чате
+    """
+    # Только в группе/канале (не в личке)
+    if message.chat.type == "private":
+        return
+        
+    text = message.text.lower()
+    
+    # Игнорируем команды
+    if text.startswith('/'):
+        return
+    
+    keywords_discounts = ['զեղչ', 'скидка', 'discount', 'акция', 'sale', 'zexj']
+    keywords_buy = ['գնել', 'купить', 'ps plus', 'подписка','psplus', 'բաժանորդ', 'subscription', 'padpiska''xax']
+    keywords_bot = ['բոտ', 'бот', 'bot', 'հայբոտ', 'haybot']
+    
+    # Если упомянули скидки
+    if any(word in text for word in keywords_discounts):
+        await message.reply(
+            "🔥 Ուզում ես տեսնել զեղչերը?\n\n"
+            "Օգտագործիր՝ /discounts",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔥 Ցույց տալ զեղչերը", callback_data="discounts")]
+            ])
+        )
+        return
+    
+    # Если упомянули покупку
+    if any(word in text for word in keywords_buy):
+        await message.reply(
+            "🎮 Ուզում ես գնել PS Plus?\n\n"
+            "Օգտագործիր՝ /buy",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🎮 Գնել բաժանորդագրություն", callback_data="buy")]
+            ])
+        )
+        return
+    
+    # Если упомянули бота
+    if any(word in text for word in keywords_bot):
+        await message.reply(
+            "👋 Այո, ես այստեղ եմ!\n\n"
+            "Օգտագործիր՝ /start տեսնելու ինչ կարող եմ անել 🤖"
+        )
+        return
 
 
 # ==============================
@@ -312,6 +369,28 @@ async def discounts(m: types.Message):
         await msg.edit_text(format_games(), reply_markup=only_back())
     else:
         await m.answer(format_games(), reply_markup=only_back())
+
+
+@dp.message(Command("help"))
+async def help_command(m: types.Message):
+    help_text = """📖 Օգնություն՝
+
+Հասանելի հրամաններ՝
+
+/start - Մեկնարկել բոտը
+/discounts - Տեսնել PlayStation զեղչերը 🔥
+/buy - Գնել PS Plus բաժանորդագրություն
+/support - Կապվել ադմինների հետ
+
+Կարող ես նաև պարզապես գրել՝
+"զեղչ" - ցույց կտամ զեղչերը
+"գնել" - կօգնեմ գնել բաժանորդագրություն
+"բոտ" - կպատասխանեմ
+
+📱 Միացիր մեր Facebook խմբին՝
+https://www.facebook.com/share/g/17foQWxCyZ/"""
+    
+    await m.answer(help_text, reply_markup=only_back())
 
 
 # ==============================
@@ -358,13 +437,11 @@ async def tr(c: types.CallbackQuery):
 # ==============================
 
 async def scheduler():
-    global LAST_POST, LAST_FB_POST
+    global LAST_POST, LAST_FB_POST, LAST_BOT_REMINDER
     
-    # Сразу загружаем данные при старте
     await update_cache()
 
     while True:
-        # Обновляем кэш скидок
         await update_cache()
 
         # Отправка скидок
@@ -379,6 +456,12 @@ async def scheduler():
             LAST_FB_POST = datetime.now()
             print("✅ Приглашение в Facebook группу отправлено")
 
+        # Напоминание о боте
+        if datetime.now() - LAST_BOT_REMINDER >= timedelta(days=BOT_REMINDER_EVERY_DAYS):
+            await bot.send_message(CHAT_ID, BOT_REMINDER_MESSAGE)
+            LAST_BOT_REMINDER = datetime.now()
+            print("✅ Напоминание о боте отправлено")
+
         await asyncio.sleep(CHECK_EVERY)
 
 
@@ -391,10 +474,11 @@ async def main():
     print("👋 Приветствие новых участников включено")
     print(f"📱 Facebook посты каждые {FB_POST_EVERY_DAYS} дня")
     print(f"🔥 Скидки каждые {POST_EVERY_DAYS} дня")
+    print(f"💡 Напоминания о боте каждые {BOT_REMINDER_EVERY_DAYS} дня")
+    print("🔑 Реакция на ключевые слова включена")
     
     asyncio.create_task(scheduler())
     
-    # Включаем chat_member обновления
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot, allowed_updates=["message", "callback_query", "chat_member"])
 
