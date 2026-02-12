@@ -4,8 +4,8 @@ import aiohttp
 from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import Command, ChatMemberUpdatedFilter, KICKED, MEMBER, ADMINISTRATOR
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatMemberUpdated
 
 
 TOKEN = os.getenv("TOKEN")
@@ -25,6 +25,10 @@ TOP_COUNT = 5
 POST_EVERY_DAYS = 3
 CHECK_EVERY = 3600  # проверка каждый час
 
+# Facebook խմբի հրապարակում
+FB_POST_EVERY_DAYS = 2  # Ամեն 2 օրը մեկ
+LAST_FB_POST = datetime.min
+
 
 POPULAR = [
     "gta", "fc", "fifa", "call of duty",
@@ -42,6 +46,47 @@ SUPPORT_MANAGER = "@BE4HOCT6 @Hovo120193 @ash_avanesyan"
 
 CACHE = []
 LAST_POST = datetime.min
+
+
+# ==============================
+# 📱 FACEBOOK ԽՈՒՄԲ
+# ==============================
+
+FB_GROUP_MESSAGE = """🎮 Միացիր մեր Հայ🇦🇲PS խմբին Facebook-ում! 🔥
+
+📌 PS Plus բաժանորդագրություններ
+📌 Խաղային հաշիվներ
+📌 Օգտակար խորհուրդներ
+📌 Ակտիվ community
+
+👥 Արդեն ավելի քան 2000 հետևորդ!
+
+🔗 Միացիր հիմա՝ https://www.facebook.com/share/g/17foQWxCyZ/
+
+Մենք սպասում ենք քեզ! 🎯"""
+
+
+# ==============================
+# 👋 ПРИВЕТСТВИЕ НОВЫХ УЧАСТНИКОВ
+# ==============================
+
+WELCOME_NEW_MEMBER = """👋 Բարի գալուստ, {name}! 
+
+Ուրախ ենք տեսնել քեզ Հայ🇦🇲PS ալիքում! 🎮
+
+Այստեղ դու կգտնես՝
+✅ Լավագույն PlayStation զեղչեր
+✅ Էժան PS Plus բաժանորդագրություններ
+✅ Հուսալի խաղային հաշիվներ
+✅ Օգտակար խորհուրդներ և նորություններ
+
+📱 Օգտագործիր /start՝ բոտին մեկնարկելու համար
+🔥 Օգտագործիր /discounts՝ ակտուալ զեղչերը տեսնելու համար
+
+Մենք սպասում ենք քեզ նաև մեր Facebook խմբում՝
+🔗 https://www.facebook.com/share/g/17foQWxCyZ/
+
+Հաջող խաղ! 🎯"""
 
 
 # ==============================
@@ -88,7 +133,7 @@ def only_back():
 
 
 # ==============================
-# 🔥 СКИДКИ (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+# 🔥 СКИДКИ
 # ==============================
 
 def popular(title):
@@ -101,7 +146,6 @@ async def fetch_deals():
     Получаем скидки PlayStation из PSDeals API
     """
     
-    # Используем альтернативный API
     url = "https://psdeals.net/api/v1/games"
     
     headers = {
@@ -140,8 +184,7 @@ async def update_cache():
     data = await fetch_deals()
 
     if not data:
-        print("⚠️ Данные не получены, пробую резервный метод...")
-        # Резервный метод - используем статичные популярные скидки
+        print("⚠️ Данные не получены, использую резервные данные...")
         CACHE = [
             ("God of War Ragnarök", 40, "https://store.playstation.com"),
             ("The Last of Us Part II", 50, "https://store.playstation.com"),
@@ -156,7 +199,6 @@ async def update_cache():
     for g in data:
         title = g.get("name", "")
         
-        # Получаем процент скидки
         prices = g.get("prices", {})
         if not prices:
             continue
@@ -178,7 +220,6 @@ async def update_cache():
         print(f"✅ Найдено {len(CACHE)} игр со скидками")
     else:
         print("⚠️ Игры не найдены, использую резервные данные")
-        # Резервные данные если API не вернул результаты
         CACHE = [
             ("GTA V Premium Edition", 60, "https://store.playstation.com"),
             ("Red Dead Redemption 2", 55, "https://store.playstation.com"),
@@ -198,6 +239,50 @@ def format_games():
         text += f"🎮 {t} — -{d}%\n🔗 {l}\n\n"
 
     return text
+
+
+# ==============================
+# 👋 ПРИВЕТСТВИЕ НОВЫХ УЧАСТНИКОВ
+# ==============================
+
+@dp.chat_member(ChatMemberUpdatedFilter(member_status_changed=MEMBER))
+async def on_user_join(event: ChatMemberUpdated):
+    """
+    Срабатывает когда новый пользователь присоединяется к каналу/группе
+    """
+    # Получаем имя нового участника
+    user = event.new_chat_member.user
+    name = user.first_name or user.username or "Ընկեր"
+    
+    # Отправляем приветственное сообщение
+    welcome_text = WELCOME_NEW_MEMBER.format(name=name)
+    
+    try:
+        await bot.send_message(
+            chat_id=event.chat.id,
+            text=welcome_text
+        )
+        print(f"✅ Приветствие отправлено для {name}")
+    except Exception as e:
+        print(f"❌ Ошибка отправки приветствия: {e}")
+
+
+# Альтернативный обработчик для групп (если первый не сработает)
+@dp.message(F.new_chat_members)
+async def on_new_chat_members(message: types.Message):
+    """
+    Резервный обработчик для групп
+    """
+    for user in message.new_chat_members:
+        name = user.first_name or user.username or "Ընկեր"
+        
+        welcome_text = WELCOME_NEW_MEMBER.format(name=name)
+        
+        try:
+            await message.answer(welcome_text)
+            print(f"✅ Приветствие отправлено для {name} (резервный метод)")
+        except Exception as e:
+            print(f"❌ Ошибка отправки приветствия: {e}")
 
 
 # ==============================
@@ -273,18 +358,26 @@ async def tr(c: types.CallbackQuery):
 # ==============================
 
 async def scheduler():
-    global LAST_POST
+    global LAST_POST, LAST_FB_POST
     
     # Сразу загружаем данные при старте
     await update_cache()
 
     while True:
+        # Обновляем кэш скидок
         await update_cache()
 
+        # Отправка скидок
         if datetime.now() - LAST_POST >= timedelta(days=POST_EVERY_DAYS) and CACHE:
             await bot.send_message(CHAT_ID, format_games())
             LAST_POST = datetime.now()
             print("✅ Скидки отправлены в канал")
+
+        # Отправка приглашения в Facebook группу
+        if datetime.now() - LAST_FB_POST >= timedelta(days=FB_POST_EVERY_DAYS):
+            await bot.send_message(CHAT_ID, FB_GROUP_MESSAGE)
+            LAST_FB_POST = datetime.now()
+            print("✅ Приглашение в Facebook группу отправлено")
 
         await asyncio.sleep(CHECK_EVERY)
 
@@ -295,8 +388,15 @@ async def scheduler():
 
 async def main():
     print("🤖 Бот запускается...")
+    print("👋 Приветствие новых участников включено")
+    print(f"📱 Facebook посты каждые {FB_POST_EVERY_DAYS} дня")
+    print(f"🔥 Скидки каждые {POST_EVERY_DAYS} дня")
+    
     asyncio.create_task(scheduler())
-    await dp.start_polling(bot)
+    
+    # Включаем chat_member обновления
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot, allowed_updates=["message", "callback_query", "chat_member"])
 
 
 if __name__ == "__main__":
