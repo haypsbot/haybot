@@ -336,8 +336,8 @@ async def handle_keywords(message: types.Message):
     if text.startswith('/'):
         return
     
-    keywords_discounts = ['զեղչ', 'скидк', 'discount', 'акци', 'sale']
-    keywords_buy = ['գնել', 'купить', 'ps plus', 'подписка', 'բաժանորդ', 'subscription']
+    keywords_discounts = ['զեղչ', 'скидка', 'discount', 'акция', 'sale', 'zexj']
+    keywords_buy = ['գնել', 'купить', 'ps plus', 'подписка', 'բաժանորդ', 'subscription', 'padpiska', 'psplus', 'ukraina', 'ukrainakan', 'turqakan']
     keywords_bot = ['բոտ', 'бот', 'bot', 'հայբոտ', 'haybot']
     
     # Если упомянули скидки
