@@ -1,7 +1,9 @@
 import asyncio
 import os
 import aiohttp
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, ChatMemberUpdatedFilter, MEMBER
@@ -27,11 +29,12 @@ CHECK_EVERY = 3600
 
 # Facebook խմբի հրապարակում
 FB_POST_EVERY_DAYS = 2
-LAST_FB_POST = datetime.min
 
 # Напоминание о боте
 BOT_REMINDER_EVERY_DAYS = 4
-LAST_BOT_REMINDER = datetime.min
+
+# Файл для хранения состояния
+STATE_FILE = "bot_state.json"
 
 
 POPULAR = [
@@ -39,7 +42,8 @@ POPULAR = [
     "god of war", "spider", "last of us",
     "hogwarts", "red dead", "cyberpunk",
     "tekken", "mortal kombat", "elden ring",
-    "uncharted", "horizon", "assassin"
+    "uncharted", "horizon", "assassin",
+    "batman", "witcher", "fallout", "elder scrolls"
 ]
 
 
@@ -49,7 +53,57 @@ SUPPORT_MANAGER = "@BE4HOCT6 @Hovo120193 @ash_avanesyan"
 
 
 CACHE = []
-LAST_POST = datetime.min
+
+
+# ==============================
+# 💾 СОХРАНЕНИЕ И ЗАГРУЗКА СОСТОЯНИЯ
+# ==============================
+
+def load_state():
+    """
+    Загружает даты последних постов из файла
+    """
+    if Path(STATE_FILE).exists():
+        try:
+            with open(STATE_FILE, 'r') as f:
+                data = json.load(f)
+                return {
+                    'last_post': datetime.fromisoformat(data.get('last_post', datetime.min.isoformat())),
+                    'last_fb_post': datetime.fromisoformat(data.get('last_fb_post', datetime.min.isoformat())),
+                    'last_bot_reminder': datetime.fromisoformat(data.get('last_bot_reminder', datetime.min.isoformat()))
+                }
+        except Exception as e:
+            print(f"⚠️ Ошибка загрузки состояния: {e}")
+    
+    return {
+        'last_post': datetime.min,
+        'last_fb_post': datetime.min,
+        'last_bot_reminder': datetime.min
+    }
+
+
+def save_state(last_post, last_fb_post, last_bot_reminder):
+    """
+    Сохраняет даты последних постов в файл
+    """
+    try:
+        data = {
+            'last_post': last_post.isoformat(),
+            'last_fb_post': last_fb_post.isoformat(),
+            'last_bot_reminder': last_bot_reminder.isoformat()
+        }
+        with open(STATE_FILE, 'w') as f:
+            json.dump(data, f)
+        print("💾 Состояние сохранено")
+    except Exception as e:
+        print(f"⚠️ Ошибка сохранения состояния: {e}")
+
+
+# Загружаем состояние при старте
+state = load_state()
+LAST_POST = state['last_post']
+LAST_FB_POST = state['last_fb_post']
+LAST_BOT_REMINDER = state['last_bot_reminder']
 
 
 # ==============================
@@ -158,97 +212,75 @@ def popular(title):
 
 
 async def fetch_deals():
-    url = "https://psdeals.net/api/v1/games"
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json'
-    }
-    
-    params = {
-        'platform': 'ps5,ps4',
-        'region': 'us',
-        'sort': 'discount',
-        'order': 'desc',
-        'limit': 50
-    }
-    
-    timeout = aiohttp.ClientTimeout(total=15)
-
     try:
+        url = "https://www.cheapshark.com/api/1.0/deals"
+        params = {
+            'storeID': '1',
+            'upperPrice': '30',
+            'onSale': '1',
+            'pageSize': '50'
+        }
+        
+        timeout = aiohttp.ClientTimeout(total=10)
+        
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url, headers=headers, params=params) as r:
+            async with session.get(url, params=params) as r:
                 if r.status == 200:
                     data = await r.json()
-                    return data.get('data', [])
-                else:
-                    print(f"❌ API вернул статус {r.status}")
-                    return []
+                    print(f"✅ CheapShark вернул {len(data)} результатов")
+                    
+                    games = []
+                    for item in data:
+                        title = item.get('title', '')
+                        normal_price = float(item.get('normalPrice', 0))
+                        sale_price = float(item.get('salePrice', 0))
+                        
+                        if normal_price > 0:
+                            discount = int(((normal_price - sale_price) / normal_price) * 100)
+                            if discount >= MIN_DISCOUNT and popular(title):
+                                link = f"https://www.cheapshark.com/redirect?dealID={item.get('dealID', '')}"
+                                games.append((title, discount, link))
+                    
+                    return games
     except Exception as e:
-        print(f"❌ Ошибка загрузки: {e}")
-        return []
+        print(f"❌ CheapShark ошибка: {e}")
+    
+    return []
 
 
 async def update_cache():
     global CACHE
 
     print("🔄 Обновляю кэш скидок...")
-    data = await fetch_deals()
-
-    if not data:
-        print("⚠️ Данные не получены, использую резервные данные...")
-        CACHE = [
-            ("God of War Ragnarök", 40, "https://store.playstation.com"),
-            ("The Last of Us Part II", 50, "https://store.playstation.com"),
-            ("Spider-Man Miles Morales", 35, "https://store.playstation.com"),
-            ("Horizon Forbidden West", 45, "https://store.playstation.com"),
-            ("Elden Ring", 30, "https://store.playstation.com")
-        ]
-        return
-
-    games = []
-
-    for g in data:
-        title = g.get("name", "")
-        
-        prices = g.get("prices", {})
-        if not prices:
-            continue
-            
-        discount = 0
-        for region_data in prices.values():
-            if isinstance(region_data, dict):
-                discount = int(region_data.get("discount", 0))
-                break
-        
-        url = g.get("url", "https://store.playstation.com")
-
-        if discount >= MIN_DISCOUNT and popular(title):
-            games.append((title, discount, url))
+    games = await fetch_deals()
 
     if games:
         games.sort(key=lambda x: x[1], reverse=True)
         CACHE = games[:TOP_COUNT]
-        print(f"✅ Найдено {len(CACHE)} игр со скидками")
+        print(f"✅ Найдено {len(CACHE)} реальных игр со скидками")
     else:
-        print("⚠️ Игры не найдены, использую резервные данные")
-        CACHE = [
-            ("GTA V Premium Edition", 60, "https://store.playstation.com"),
-            ("Red Dead Redemption 2", 55, "https://store.playstation.com"),
-            ("Cyberpunk 2077", 50, "https://store.playstation.com"),
-            ("Call of Duty Modern Warfare", 40, "https://store.playstation.com"),
-            ("FIFA 24", 35, "https://store.playstation.com")
-        ]
+        print("⚠️ Реальные скидки не найдены")
+        CACHE = []
 
 
 def format_games():
     if not CACHE:
-        return "❌ Զեղչեր չեն գտնվել"
+        return """❌ Ներկայումս մեծ զեղչեր չկան
+
+🔍 Խնդրում ենք ստուգել մի փոքր ավելի ուշ կամ այցելել՝
+🌐 https://store.playstation.com/en-us/pages/latest
+
+📱 Կամ կապվել մեր մենեջերների հետ՝
+{support}
+
+Մենք միշտ տեղեկացնում ենք լավագույն զեղչերի մասին! 🔥""".format(support=SUPPORT_MANAGER)
 
     text = "🔥 Top PlayStation զեղչեր\n\n"
 
     for t, d, l in CACHE:
         text += f"🎮 {t} — -{d}%\n🔗 {l}\n\n"
+    
+    text += "\n💡 Ավելի շատ զեղչեր՝ https://store.playstation.com/"
 
     return text
 
@@ -289,7 +321,7 @@ async def on_new_chat_members(message: types.Message):
 
 
 # ==============================
-# КОМАНДЫ (В ПРАВИЛЬНОМ ПОРЯДКЕ!)
+# КОМАНДЫ
 # ==============================
 
 @dp.message(Command("start"))
@@ -309,12 +341,9 @@ async def support(m: types.Message):
 
 @dp.message(Command("discounts"))
 async def discounts(m: types.Message):
-    if not CACHE:
-        msg = await m.answer("🔄 Թարմացնում եմ զեղչերը...")
-        await update_cache()
-        await msg.edit_text(format_games(), reply_markup=only_back())
-    else:
-        await m.answer(format_games(), reply_markup=only_back())
+    msg = await m.answer("🔄 Թարմացնում եմ զեղչերը...")
+    await update_cache()
+    await msg.edit_text(format_games(), reply_markup=only_back())
 
 
 # ==============================
@@ -323,16 +352,11 @@ async def discounts(m: types.Message):
 
 @dp.message(F.text)
 async def handle_keywords(message: types.Message):
-    """
-    Реагирует на ключевые слова в чате
-    """
-    # Только в группе/канале (не в личке)
     if message.chat.type == "private":
         return
         
     text = message.text.lower()
     
-    # Игнорируем команды
     if text.startswith('/'):
         return
     
@@ -340,7 +364,6 @@ async def handle_keywords(message: types.Message):
     keywords_buy = ['գնել', 'купить', 'ps plus', 'подписка', 'բաժանորդ', 'subscription', 'padpiska', 'psplus', 'ukraina', 'ukrainakan', 'turqakan']
     keywords_bot = ['բոտ', 'бот', 'bot', 'հայբոտ', 'haybot']
     
-    # Если упомянули скидки
     if any(word in text for word in keywords_discounts):
         await message.reply(
             "🔥 Ուզում ես տեսնել զեղչերը?\n\n"
@@ -351,7 +374,6 @@ async def handle_keywords(message: types.Message):
         )
         return
     
-    # Если упомянули покупку
     if any(word in text for word in keywords_buy):
         await message.reply(
             "🎮 Ուզում ես գնել PS Plus?\n\n"
@@ -362,7 +384,6 @@ async def handle_keywords(message: types.Message):
         )
         return
     
-    # Если упомянули бота
     if any(word in text for word in keywords_bot):
         await message.reply(
             "👋 Այո, ես այստեղ եմ!\n\n"
@@ -392,12 +413,9 @@ async def support_btn(c: types.CallbackQuery):
 
 @dp.callback_query(F.data == "discounts")
 async def discounts_btn(c: types.CallbackQuery):
-    if not CACHE:
-        await c.message.edit_text("🔄 Թարմացնում եմ զեղչերը...")
-        await update_cache()
-        await c.message.edit_text(format_games(), reply_markup=only_back())
-    else:
-        await c.message.edit_text(format_games(), reply_markup=only_back())
+    await c.message.edit_text("🔄 Թարմացնում եմ զեղչերը...")
+    await update_cache()
+    await c.message.edit_text(format_games(), reply_markup=only_back())
 
 
 @dp.callback_query(F.data == "uk")
@@ -422,22 +440,29 @@ async def scheduler():
     while True:
         await update_cache()
 
-        # Отправка скидок
-        if datetime.now() - LAST_POST >= timedelta(days=POST_EVERY_DAYS) and CACHE:
-            await bot.send_message(CHAT_ID, format_games())
+        # Отправка скидок ТОЛЬКО если они есть
+        if datetime.now() - LAST_POST >= timedelta(days=POST_EVERY_DAYS):
+            if CACHE:
+                await bot.send_message(CHAT_ID, format_games())
+                print("✅ Скидки отправлены в канал")
+            else:
+                print("⏭️ Скидок нет, пропускаем отправку")
+            
             LAST_POST = datetime.now()
-            print("✅ Скидки отправлены в канал")
+            save_state(LAST_POST, LAST_FB_POST, LAST_BOT_REMINDER)
 
         # Отправка приглашения в Facebook группу
         if datetime.now() - LAST_FB_POST >= timedelta(days=FB_POST_EVERY_DAYS):
             await bot.send_message(CHAT_ID, FB_GROUP_MESSAGE)
             LAST_FB_POST = datetime.now()
+            save_state(LAST_POST, LAST_FB_POST, LAST_BOT_REMINDER)
             print("✅ Приглашение в Facebook группу отправлено")
 
         # Напоминание о боте
         if datetime.now() - LAST_BOT_REMINDER >= timedelta(days=BOT_REMINDER_EVERY_DAYS):
             await bot.send_message(CHAT_ID, BOT_REMINDER_MESSAGE)
             LAST_BOT_REMINDER = datetime.now()
+            save_state(LAST_POST, LAST_FB_POST, LAST_BOT_REMINDER)
             print("✅ Напоминание о боте отправлено")
 
         await asyncio.sleep(CHECK_EVERY)
@@ -451,9 +476,12 @@ async def main():
     print("🤖 Бот запускается...")
     print("👋 Приветствие новых участников включено")
     print(f"📱 Facebook посты каждые {FB_POST_EVERY_DAYS} дня")
-    print(f"🔥 Скидки каждые {POST_EVERY_DAYS} дня")
+    print(f"🔥 Скидки каждые {POST_EVERY_DAYS} дня (только реальные)")
     print(f"💡 Напоминания о боте каждые {BOT_REMINDER_EVERY_DAYS} дня")
     print("🔑 Реакция на ключевые слова включена")
+    print(f"📅 Последний пост со скидками: {LAST_POST}")
+    print(f"📅 Последний Facebook пост: {LAST_FB_POST}")
+    print(f"📅 Последнее напоминание: {LAST_BOT_REMINDER}")
     
     asyncio.create_task(scheduler())
     
