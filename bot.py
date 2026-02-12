@@ -18,11 +18,16 @@ dp = Dispatcher()
 # ⚙️ НАСТРОЙКИ
 # ===================================
 
-#CHAT_ID = -100XXXXXXXXXX   # <-- вставь id группы
+#CHAT_ID = -100XXXXXXXXXX  # <-- вставь id
 
-MIN_DISCOUNT = 30          # >= 30%
-POST_EVERY_DAYS = 3        # каждые 2-3 дня
-CHECK_EVERY = 86400        # проверка раз в сутки
+MIN_DISCOUNT = 30
+POST_EVERY_DAYS = 3
+CHECK_EVERY = 86400
+TOP_COUNT = 5
+
+
+# только эти регионы
+REGIONS = ["ua", "tr"]
 
 
 POPULAR_GAMES = [
@@ -35,8 +40,7 @@ POPULAR_GAMES = [
 
 UK_MANAGERS = "@BE4HOCT6 @ash_avanesyan"
 TR_MANAGERS = "@Hovo120193"
-SUPPORT_MANAGER = "@BE4HOCT6"
-
+SUPPORT_MANAGER = "@BE4HOCT6 @Hovo120193"
 
 LAST_POST_TIME = datetime.min
 
@@ -51,20 +55,21 @@ WELCOME_TEXT = """🤖 Բարև, ես HayBot-ն եմ
 
 Ես կարող եմ՝
 ✅ Օգնել բաժանորդագրությամբ
-✅ Կապել ադմինների հետ
 ✅ Ցույց տալ լավագույն զեղչերը
+✅ Կապել ադմինների հետ
 
 Ընտրիր ստորև 👇
 """
 
 
 # ===================================
-# INLINE КНОПКИ
+# INLINE МЕНЮ
 # ===================================
 
 def main_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎮 Գնել բաժանորդագրություն", callback_data="buy")],
+        [InlineKeyboardButton(text="🔥 Զեղչեր", callback_data="discounts")],
         [InlineKeyboardButton(text="🆘 Աջակցություն", callback_data="support")]
     ])
 
@@ -77,6 +82,53 @@ def country_menu():
         ],
         [InlineKeyboardButton(text="⬅️ Հետ", callback_data="back")]
     ])
+
+
+# ===================================
+# УТИЛИТЫ
+# ===================================
+
+def is_popular(title: str):
+    title = title.lower()
+    return any(x in title for x in POPULAR_GAMES)
+
+
+async def fetch_region_deals(region):
+    url = f"https://psprices.com/api/latest-deals?region={region}"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as r:
+            return await r.json()
+
+
+async def get_filtered_deals():
+
+    games = []
+
+    for region in REGIONS:
+        data = await fetch_region_deals(region)
+
+        for g in data:
+            title = g["title"]
+            discount = g.get("discount", 0)
+            link = g.get("url", "")
+
+            if discount >= MIN_DISCOUNT and is_popular(title):
+                games.append((title, discount, link))
+
+    games = sorted(games, key=lambda x: x[1], reverse=True)
+
+    return games[:TOP_COUNT]
+
+
+def build_text(games):
+
+    text = "🔥 PlayStation Store Top զեղչեր\n\n"
+
+    for title, discount, link in games:
+        text += f"🎮 {title} — -{discount}%\n🔗 Գնել → {link}\n\n"
+
+    return text
 
 
 # ===================================
@@ -98,9 +150,33 @@ async def support_cmd(message: types.Message):
     await message.answer(f"🆘 Աջակցություն 👉 {SUPPORT_MANAGER}")
 
 
+@dp.message(Command("discounts"))
+async def discounts_cmd(message: types.Message):
+
+    await message.answer("🔍 Ստուգում եմ զեղչերը...")
+
+    games = await get_filtered_deals()
+
+    if not games:
+        await message.answer("Զեղչեր չկան 😕")
+        return
+
+    await message.answer(build_text(games))
+
+
 # ===================================
 # CALLBACK
 # ===================================
+
+@dp.callback_query(F.data == "discounts")
+async def discounts_btn(callback: types.CallbackQuery):
+
+    await callback.message.edit_text("🔍 Ստուգում եմ զեղչերը...")
+
+    games = await get_filtered_deals()
+
+    await callback.message.edit_text(build_text(games), reply_markup=main_menu())
+
 
 @dp.callback_query(F.data == "buy")
 async def buy_btn(callback: types.CallbackQuery):
@@ -133,6 +209,7 @@ async def back(callback: types.CallbackQuery):
 
 @dp.message(F.new_chat_members)
 async def welcome_new(message: types.Message):
+
     for user in message.new_chat_members:
         name = f"@{user.username}" if user.username else user.full_name
 
@@ -143,57 +220,25 @@ async def welcome_new(message: types.Message):
 
 
 # ===================================
-# 🔥 ДАЙДЖЕСТ СКИДОК
+# АВТО-ДАЙДЖЕСТ
 # ===================================
-
-def is_popular(title: str):
-    title = title.lower()
-    return any(x in title for x in POPULAR_GAMES)
-
 
 async def discounts_digest():
     global LAST_POST_TIME
 
     while True:
-        try:
-            now = datetime.now()
 
-            if now - LAST_POST_TIME < timedelta(days=POST_EVERY_DAYS):
-                await asyncio.sleep(CHECK_EVERY)
-                continue
+        now = datetime.now()
 
-            async with aiohttp.ClientSession() as session:
-                async with session.get("https://psprices.com/api/latest-deals") as r:
-                    data = await r.json()
+        if now - LAST_POST_TIME < timedelta(days=POST_EVERY_DAYS):
+            await asyncio.sleep(CHECK_EVERY)
+            continue
 
-            games = []
+        games = await get_filtered_deals()
 
-            for game in data:
-                title = game["title"]
-                discount = game.get("discount", 0)
-
-                if discount >= MIN_DISCOUNT and is_popular(title):
-                    games.append((title, discount))
-
-            if not games:
-                await asyncio.sleep(CHECK_EVERY)
-                continue
-
-            games = sorted(games, key=lambda x: x[1], reverse=True)[:8]
-
-            text = "🔥 PlayStation Store զեղչեր (Top deals)\n\n"
-
-            for title, discount in games:
-                text += f"🎮 {title} — -{discount}%\n"
-
-            text += "\nՇտապիր մինչև զեղչի ավարտը 🚀\n👉 Օգտագործիր HayBot /start"
-
-            await bot.send_message(CHAT_ID, text)
-
+        if games:
+            await bot.send_message(CHAT_ID, build_text(games))
             LAST_POST_TIME = now
-
-        except Exception as e:
-            print("Digest error:", e)
 
         await asyncio.sleep(CHECK_EVERY)
 
