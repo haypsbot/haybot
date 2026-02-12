@@ -11,14 +11,14 @@ dp = Dispatcher()
 
 
 # =========================
-# ⚙️ НАСТРОЙКИ (измени только это)
+# ⚙️ НАСТРОЙКИ
 # =========================
 
-#CHAT_ID = -100XXXXXXXXXX  # <-- ВСТАВЬ ID своей группы
+#CHAT_ID = -100XXXXXXXXXX  # <-- вставь ID группы
 
 UK_MANAGERS = "@BE4HOCT6 @ash_avanesyan"
 TR_MANAGERS = "@Hovo120193"
-SUPPORT_MANAGER = "@BE4HOCT6"
+SUPPORT_MANAGER = "@BE4HOCT6 @ash_avanesyan @Hovo120193"
 
 
 # =========================
@@ -27,7 +27,7 @@ SUPPORT_MANAGER = "@BE4HOCT6"
 
 main_kb = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="💳 PS Plus բաժանորդագրություն")],
+        [KeyboardButton(text="🎮 PS Plus բաժանորդագրություն")],
         [KeyboardButton(text="🆘 Աջակցություն")]
     ],
     resize_keyboard=True
@@ -64,13 +64,13 @@ async def back(message: types.Message):
 
 
 # =========================
-# 💳 ПОКУПКА/ЦЕНЫ (объединено)
+# 🎮 PS PLUS (главная функция)
 # =========================
 
-@dp.message(lambda m: m.text == "💳 Գնել / Գներ")
-async def buy_prices(message: types.Message):
+@dp.message(lambda m: m.text == "🎮 PS Plus բաժանորդագրություն")
+async def ps_plus(message: types.Message):
     await message.answer(
-        "💳 Ընտրիր տարածաշրջանը 👇",
+        "🎮 Ընտրիր տարածաշրջանը 👇",
         reply_markup=country_kb
     )
 
@@ -111,7 +111,7 @@ async def support(message: types.Message):
 
 
 # =========================
-# 👋 ПРИВЕТСТВИЕ В ГРУППЕ
+# 👋 ПРИВЕТ НОВЫМ
 # =========================
 
 @dp.message(F.new_chat_members)
@@ -119,13 +119,13 @@ async def welcome(message: types.Message):
     for user in message.new_chat_members:
         await message.answer(
             f"👋 Բարի գալուստ, {user.full_name}!\n\n"
-            "🤖 HayBot-ը կօգնի քեզ գնել PS Plus\n"
-            "Գրիր /start կամ օգտագործիր մենյուն 🎮"
+            "🎮 PS Plus բաժանորդագրությունները հասանելի են\n"
+            "Սեղմիր մենյուից և ընտրիր տարածաշրջանը 🤖"
         )
 
 
 # =========================
-# 📢 АВТОПОСТ КАЖДЫЕ 3 ЧАСА
+# 📢 АВТОПОСТ
 # =========================
 
 async def auto_post():
@@ -135,9 +135,9 @@ async def auto_post():
             "🔥 PS Plus բաժանորդագրություններ հասանելի են\n\n"
             f"🇺🇦 Ուկրաինա → {UK_MANAGERS}\n"
             f"🇹🇷 Թուրքիա → {TR_MANAGERS}\n\n"
-            "Գրիր /start 🤖"
+            "Օգտագործիր բոտը 👇"
         )
-        await asyncio.sleep(10800)  # 3 часа
+        await asyncio.sleep(10800)
 
 
 # =========================
