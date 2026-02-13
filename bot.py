@@ -3,21 +3,21 @@ import os
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Optional, Tuple
-from dataclasses import dataclass, asdict
-from collections import defaultdict
+from typing import Dict, Optional
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, ChatMemberUpdatedFilter, MEMBER
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatMemberUpdated
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
 
 TOKEN = os.getenv("TOKEN")
 
 # Используем MemoryStorage для FSM (быстрее чем дефолтный)
 storage = MemoryStorage()
-bot = Bot(TOKEN, parse_mode="HTML")
+bot = Bot(TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=storage)
 
 
@@ -25,7 +25,6 @@ dp = Dispatcher(storage=storage)
 # ⚙️ КОНФИГУРАЦИЯ
 # ==============================
 
-@dataclass
 class Config:
     """Конфигурация бота"""
     CHAT_ID: int = -1003257278638
@@ -61,8 +60,8 @@ class FastDataManager:
         self.state: Dict = {}
         self.users: Dict = {}
         self._dirty: bool = False
-        self._user_cache: Dict = {}  # Кэш для частых запросов
-        self._top_cache: Optional[list] = None  # Кэш топа
+        self._user_cache: Dict = {}
+        self._top_cache: Optional[list] = None
         self._top_cache_time: datetime = datetime.min
         
         self._load_all()
@@ -240,7 +239,7 @@ db = FastDataManager()
 
 
 # ==============================
-# 📊 ГЕНЕРАТОРЫ ТЕКСТА (ОПТИМИЗИРОВАННЫЕ)
+# 📊 ГЕНЕРАТОРЫ ТЕКСТА
 # ==============================
 
 def get_stats_text() -> str:
@@ -269,15 +268,15 @@ def get_top_text() -> str:
     if not top:
         return "❌ Տվյալներ դեռ չկան"
     
-    lines = ["🏆 Ամենաակտիվ օգտատերերը\n"]
+    lines = ["🏆 Ամենաակտիվ օգտատերերը\n\n"]
     medals = ["🥇", "🥈", "🥉"]
     
     for i, (uid, u) in enumerate(top, 1):
         medal = medals[i-1] if i <= 3 else f"{i}."
         name = u.get('name') or u.get('username') or f"User{uid[:6]}"
-        lines.append(f"{medal} {name}\n   💎 {u['points']} | 💬 {u['messages']}\n")
+        lines.append(f"{medal} {name}\n   💎 {u['points']} | 💬 {u['messages']}\n\n")
     
-    lines.append("\n💡 Միավորներ՝\n├ 10 հաղորդագրություն = 1 միավոր\n└ 1 հրաման = 2 միավոր")
+    lines.append("💡 Միավորներ՝\n├ 10 հաղորդագրություն = 1 միավոր\n└ 1 հրաման = 2 միավոր")
     
     return "".join(lines)
 
@@ -361,10 +360,9 @@ START_MSG = """🤖 Բարև, ես HayBot-ն եմ
 
 
 # ==============================
-# UI (ОПТИМИЗИРОВАНО)
+# UI
 # ==============================
 
-# Кэшируем клавиатуры
 _KEYBOARDS = {}
 
 def get_keyboard(key: str) -> InlineKeyboardMarkup:
@@ -405,12 +403,11 @@ def get_keyboard(key: str) -> InlineKeyboardMarkup:
 
 
 # ==============================
-# 👋 ОБРАБОТЧИКИ (ОПТИМИЗИРОВАННЫЕ)
+# 👋 ОБРАБОТЧИКИ
 # ==============================
 
 @dp.chat_member(ChatMemberUpdatedFilter(member_status_changed=MEMBER))
 async def on_user_join(event: ChatMemberUpdated):
-    """Приветствие нового участника"""
     user = event.new_chat_member.user
     name = user.first_name or user.username or "Ընկեր"
     
@@ -425,7 +422,6 @@ async def on_user_join(event: ChatMemberUpdated):
 
 @dp.message(F.new_chat_members)
 async def on_new_members(m: types.Message):
-    """Резервный обработчик новых участников"""
     for user in m.new_chat_members:
         name = user.first_name or user.username or "Ընկեր"
         db.track_new_member()
@@ -487,7 +483,6 @@ async def cmd_profile(m: types.Message):
 # КЛЮЧЕВЫЕ СЛОВА
 # ==============================
 
-# Предкомпилируем множества для быстрого поиска
 KEYWORDS = {
     'buy': {'գնել', 'купить', 'ps plus', 'подписка', 'բաժանորդ', 'subscription', 'padpiska', 'psplus', 'ukraina', 'ukrainakan', 'turqakan'},
     'bot': {'բոտ', 'бот', 'bot', 'հայբոտ', 'haybot'},
@@ -496,7 +491,6 @@ KEYWORDS = {
 
 @dp.message(F.text)
 async def handle_text(m: types.Message):
-    """Обработка текстовых сообщений"""
     if m.chat.type == "private":
         db.track_message(m.from_user.id, m.from_user.username, m.from_user.first_name)
         return
@@ -509,7 +503,6 @@ async def handle_text(m: types.Message):
     db.track_message(m.from_user.id, m.from_user.username, m.from_user.first_name)
     
     try:
-        # Используем множества для О(1) поиска
         text_set = set(text.split())
         
         if KEYWORDS['top'] & text_set:
@@ -581,25 +574,21 @@ async def cb_tr(c: types.CallbackQuery):
 # ==============================
 
 async def auto_save():
-    """Автосохранение"""
     while True:
         await asyncio.sleep(config.SAVE_INTERVAL)
         db.save_all()
 
 
 async def scheduler():
-    """Планировщик"""
     while True:
         try:
             now = datetime.now()
             
-            # Facebook
             if (now - db.state['last_fb_post']).days >= config.FB_POST_EVERY_DAYS:
                 await bot.send_message(config.CHAT_ID, FB_MSG)
                 db.state['last_fb_post'] = now
                 db._dirty = True
 
-            # Напоминание
             if (now - db.state['last_bot_reminder']).days >= config.BOT_REMINDER_EVERY_DAYS:
                 await bot.send_message(config.CHAT_ID, REMINDER_MSG)
                 db.state['last_bot_reminder'] = now
@@ -618,7 +607,6 @@ async def main():
     print("🚀 Бот запускается...")
     print(f"👥 {db.total_users} | 💬 {db.state['total_messages']}")
     
-    # Запускаем фоновые задачи
     asyncio.create_task(auto_save())
     asyncio.create_task(scheduler())
     
