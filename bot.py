@@ -343,6 +343,7 @@ def get_stats_text() -> str:
 
 
 def get_top_text() -> str:
+    """Генерирует топ с кликабельными именами"""
     top = db.get_top_users(config.MAX_TOP_USERS)
     
     if not top:
@@ -353,8 +354,21 @@ def get_top_text() -> str:
     
     for i, (uid, u) in enumerate(top, 1):
         medal = medals[i-1] if i <= 3 else f"{i}."
-        name = u.get('name') or u.get('username') or f"User{uid[:6]}"
-        lines.append(f"{medal} {name}\n   💎 {u['points']} | 💬 {u['messages']}\n\n")
+        
+        # Получаем имя
+        name = u.get('name') or u.get('username')
+        
+        # Пропускаем пользователей без имени
+        if not name:
+            continue
+        
+        # Делаем кликабельным
+        if u.get('username'):
+            clickable_name = f"<a href='tg://user?id={uid}'>@{u['username']}</a>"
+        else:
+            clickable_name = f"<a href='tg://user?id={uid}'>{name}</a>"
+        
+        lines.append(f"{medal} {clickable_name}\n   💎 {u['points']} | 💬 {u['messages']}\n\n")
     
     lines.append("💡 Միավորներ՝\n├ 10 հաղորդագրություն = 1 միավոր\n└ 1 հրաման = 2 միավոր")
     
@@ -362,13 +376,22 @@ def get_top_text() -> str:
 
 
 def get_profile_text(user_id: int) -> str:
+    """Генерирует профиль с кликабельным именем"""
     user = db.get_user(user_id)
     rank = db.get_user_rank(user_id)
     
+    # Получаем имя
     name = user.get('name') or user.get('username') or "Օգտատեր"
+    
+    # Делаем кликабельным
+    if user.get('username'):
+        clickable_name = f"<a href='tg://user?id={user_id}'>@{user['username']}</a>"
+    else:
+        clickable_name = f"<a href='tg://user?id={user_id}'>{name}</a>"
+    
     days = (datetime.now() - datetime.fromisoformat(user['joined'])).days + 1
     
-    return f"""👤 {name}
+    return f"""👤 {clickable_name}
 
 🏆 Տեղը՝ #{rank or '—'}
 💎 Միավորներ՝ {user['points']}
